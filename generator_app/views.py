@@ -33,6 +33,11 @@ def index_view(request):
     """Рендерит главную HTML-страницу."""
     return render(request, 'generator_app/index.html')
 
+@ensure_csrf_cookie
+def test_generator_view(request):
+    """Рендерит страницу конструктора тестов."""
+    return render(request, 'generator_app/test_generator.html')
+
 class GenerateTaskView(View):
     """Обрабатывает AJAX-запрос на генерацию задачи."""
     def post(self, request, *args, **kwargs):
@@ -59,3 +64,37 @@ class GenerateTaskView(View):
             traceback.print_exc() 
             print("--------------------------")
             return JsonResponse({'error': 'An error occurred, check server logs.'}, status=500)
+
+class GenerateTestView(View):
+    """
+    Обрабатывает AJAX-запрос на генерацию целого теста.
+    Принимает массив типов задач и возвращает массив HTML-кодов.
+    """
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads(request.body)
+            task_types = data.get('task_types', [])
+
+            tasks_html = []
+            # Устанавливаем единую сложность для всех задач в тесте
+            complexity = 10
+
+            for i, task_type in enumerate(task_types):
+                task = controller.create_task(task_type, complexity=complexity)
+                if not task:
+                    # Можно пропустить задачу или вернуть ошибку
+                    continue
+
+                analyzed_task = analyzer.analyze(task)
+
+                # Передаем номер задачи для корректного отображения
+                task_html = renderer.render_single_task_to_html(analyzed_task, i + 1)
+                tasks_html.append(task_html)
+
+            return JsonResponse({'tasks_html': tasks_html})
+
+        except Exception as e:
+            print("--- AN ERROR OCCURRED IN TEST GENERATION ---")
+            traceback.print_exc()
+            print("--------------------------------------------")
+            return JsonResponse({'error': 'An error occurred during test generation.'}, status=500)

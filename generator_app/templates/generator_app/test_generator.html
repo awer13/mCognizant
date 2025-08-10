@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Конструктор тестов</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 2em auto; background-color: #f9f9f9; }
+        .controls, .config-row { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; gap: 20px; align-items: center; margin-bottom: 20px; }
+        #tasks-container { margin-top: 20px; }
+        .task-container { background-color: white; border: 1px solid #ddd; border-radius: 8px; padding: 1em 1.5em; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        h1, h2, h3 { color: #1a1a1a; }
+        button { padding: 10px 15px; border: none; background-color: #007bff; color: white; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        input[type="number"] { padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        select { padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Конструктор тестов</h1>
+
+    <div class="controls">
+        <label for="tasks-count">Количество задач:</label>
+        <input type="number" id="tasks-count" min="1" max="20" value="3">
+        <button id="configure-btn">Настроить</button>
+    </div>
+
+    <div id="tasks-config-container">
+        <!-- Сюда будут добавляться строки для настройки задач -->
+    </div>
+
+    <div id="generate-test-container" class="hidden" style="text-align: center; margin-top: 20px;">
+        <button id="generate-test-btn">Сгенерировать тест</button>
+    </div>
+
+    <div id="tasks-container">
+        <!-- Сюда будет выводиться сгенерированный тест -->
+    </div>
+
+    <!-- JavaScript будет добавлен на следующем шаге -->
+    <script>
+        // Функция для получения CSRF-токена из cookie
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+
+        const taskTypes = [
+            { value: 'series_class_1', text: 'Необходимое условие (1)' },
+            { value: 'series_class_2', text: 'Необходимое условие (2)' },
+            { value: 'series_class_3', text: 'Необходимое условие (3)' },
+            { value: 'series_class_4', text: 'Необходимое условие (4)' },
+        ];
+
+        const configureBtn = document.getElementById('configure-btn');
+        const tasksCountInput = document.getElementById('tasks-count');
+        const configContainer = document.getElementById('tasks-config-container');
+        const generateTestContainer = document.getElementById('generate-test-container');
+        const generateTestBtn = document.getElementById('generate-test-btn');
+        const tasksContainer = document.getElementById('tasks-container');
+
+        configureBtn.addEventListener('click', () => {
+            const count = parseInt(tasksCountInput.value, 10);
+            configContainer.innerHTML = ''; // Очищаем контейнер
+
+            if (count > 0) {
+                for (let i = 1; i <= count; i++) {
+                    const row = document.createElement('div');
+                    row.className = 'config-row';
+
+                    const label = document.createElement('label');
+                    label.textContent = `Задача ${i}:`;
+
+                    const select = document.createElement('select');
+                    select.className = 'task-type-select';
+
+                    taskTypes.forEach(taskType => {
+                        const option = document.createElement('option');
+                        option.value = taskType.value;
+                        option.textContent = taskType.text;
+                        select.appendChild(option);
+                    });
+
+                    row.appendChild(label);
+                    row.appendChild(select);
+                    configContainer.appendChild(row);
+                }
+                generateTestContainer.classList.remove('hidden');
+            } else {
+                generateTestContainer.classList.add('hidden');
+            }
+        });
+
+        generateTestBtn.addEventListener('click', () => {
+            const selectedTaskTypes = [];
+            const selects = document.querySelectorAll('.task-type-select');
+            selects.forEach(select => {
+                selectedTaskTypes.push(select.value);
+            });
+
+            tasksContainer.innerHTML = '<h2>Генерация теста...</h2>';
+
+            fetch('/generate-test/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                },
+                body: JSON.stringify({
+                    task_types: selectedTaskTypes,
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                tasksContainer.innerHTML = ''; // Очищаем контейнер
+                if (data.tasks_html && data.tasks_html.length > 0) {
+                    data.tasks_html.forEach(taskHtml => {
+                        tasksContainer.innerHTML += taskHtml;
+                    });
+                    MathJax.typesetPromise();
+                } else {
+                    tasksContainer.innerHTML = '<p>Произошла ошибка при генерации теста.</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                tasksContainer.innerHTML = '<p>Не удалось связаться с сервером. Проверьте консоль.</p>';
+            });
+        });
+    </script>
+
+</body>
+</html>
