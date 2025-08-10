@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Интерактивный генератор задач</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 2em auto; background-color: #f9f9f9; }
+        .controls { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; gap: 20px; align-items: center; }
+        #task-container { margin-top: 20px; }
+        .task-container { background-color: white; border: 1px solid #ddd; border-radius: 8px; padding: 1em 1.5em; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        h2, h3 { color: #1a1a1a; }
+        details { border: 1px solid #eee; border-radius: 4px; margin-top: 10px; }
+        summary { cursor: pointer; padding: 10px; font-weight: bold; background-color: #f9f9f9; }
+        .step-content { padding: 10px; border-top: 1px solid #eee; }
+        button { padding: 10px 15px; border: none; background-color: #007bff; color: white; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>Генератор задач по математике</h1>
+
+    <div class="controls">
+        <label for="task-type">Выберите тип задачи:</label>
+        <select id="task-type">
+            <option value="series_class_1">Необходимое условие (1)</option>
+            <option value="series_class_2">Необходимое условие (2)</option>
+            <option value="series_class_3">Необходимое условие (3)</option>
+            <option value="series_class_4">Необходимое условие (4)</option>
+        </select>
+        <button id="generate-btn">Сгенерировать</button>
+    </div>
+
+    <div id="task-container">
+    </div>
+
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie('csrftoken');
+
+        document.getElementById('generate-btn').addEventListener('click', () => {
+            const taskType = document.getElementById('task-type').value;
+            const container = document.getElementById('task-container');
+            container.innerHTML = 'Загрузка...';
+
+            fetch('/generate-task/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken,
+                },
+                body: JSON.stringify({
+                    task_type: taskType,
+                    complexity: 10 
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.html) {
+                    container.innerHTML = data.html;
+                    MathJax.typesetPromise();
+                } else {
+                    container.innerHTML = 'Произошла ошибка при загрузке задачи.';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                container.innerHTML = 'Не удалось связаться с сервером. Проверьте консоль для деталей.';
+            });
+        });
+    </script>
+</body>
+</html>
