@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block title %}Попытка #{{ attempt.id }} — mCognizant{% endblock %}
+
+{% block head %}
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+{% endblock %}
+
+{% block content %}
+<section class="card" id="app">
+  <h1 class="h1" style="margin-top:0">Попытка #{{ attempt.id }}</h1>
+  <div class="muted">Вопросов в тесте: {{ num_questions }}</div>
+
+  <div class="row" style="margin-top:16px; gap:16px">
+    <!-- Навигация по вопросам -->
+    <aside class="card" style="width:320px">
+      <div class="h3" style="margin:0 0 8px 0">Навигация</div>
+      <div id="qnav" class="col" style="gap:8px">
+        {% for i in q_range %}
+          <button class="btn ghost" data-q="{{ i }}" style="justify-content:flex-start">Вопрос {{ i }}</button>
+        {% endfor %}
+      </div>
+      <hr>
+      <button id="finishBtn" class="btn ghost">Завершить попытку</button>
+    </aside>
+
+    <!-- Область шага -->
+    <main class="card" style="flex:1; min-height:300px">
+      <div class="row" style="justify-content:space-between; align-items:center">
+        <div class="h3" id="qtitle">Вопрос 1</div>
+        <div class="muted small" id="stepCounter">(1 из ?)</div>
+      </div>
+      <div id="statement" class="prose" style="margin:12px 0"></div>
+
+      <div id="stepBlock" class="col" style="gap:8px">
+        <label id="stepLabel" class="muted">Подвопрос</label>
+        <div id="stepInput"></div>
+        <div class="row" style="gap:8px; margin-top:6px">
+          <button id="hintBtn" class="btn ghost">Подсказка</button>
+          <button id="sendBtn" class="btn">Отправить</button>
+          <button id="nextBtn" class="btn ghost">Далее →</button>
+        </div>
+        <div id="msg" class="small-note"></div>
+      </div>
+
+      <div style="margin-top:12px">
+        <a class="btn ghost" href="/tests/my/">← назад к списку</a>
+      </div>
+    </main>
+  </div>
+</section>
+
+<script>
+(function(){
+  const attemptId = {{ attempt.id }};
+  const totalQ = {{ num_questions }};
+  let curQ = 1;
+  let curStepIndex = 0;
+  let curStepKey = null;
+  let stepMeta = null;
+
+  function qs(sel){ return document.querySelector(sel); }
+  function el(tag, attrs={}, children=[]){
+    const e = document.createElement(tag);
+    Object.entries(attrs).forEach(([k,v])=>{
+      if(k==="class") e.className = v;
+      else if(k==="html") e.innerHTML = v;
+      else e.setAttribute(k,v);
+    });
+    children.forEach(c=>e.appendChild(c));
+    return e;
+  }
+
+  async function api(url, method='GET', body=null){
+    const r = await fetch(url, {
+      method,
+      headers: {'Content-Type':'application/json','X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]},
+      body: body ? JSON.stringify(body) : null
+    });
+    const txt = await r.text();
+    if(!r.ok){
+      try { throw new Error(JSON.parse(txt).error || 'Ошибка'); }
+      catch { throw new Error(txt.replace(/<[^>]+>/g,'').slice(0,400)); }
+    }
+    return txt ? JSON.parse(txt) : {};
+  }
+
+  function typeset(){
+    if(window.MathJax && window.MathJax.typesetPromise){
+      MathJax.typesetPromise();
+    }
+  }
+
+  async function loadStep(){
+    const d = await api(`/tests/api/attempts/${attemptId}/question/${curQ}/`);
+    curStepIndex = d.step_index;
+    stepMeta = d.step;
+    curStepKey = stepMeta.key;
+
+    qs('#qtitle').textContent = `Вопрос ${d.order}`;
+    qs('#statement').innerHTML = d.statement_html;
+    qs('#stepCounter').textContent = `(${d.step_index+1} из ${d.total_steps||1})`;
+    qs('#stepLabel').textContent = stepMeta.label || 'Подвопрос';
+
+    const host = qs('#stepInput');
+    host.innerHTML = '';
+    if(stepMeta.type === 'select'){
+      const sel = el('select', {class:'select', id:'value'});
+      (stepMeta.options||[]).forEach(opt=>{
+        sel.appendChild(el('option', {value:opt, html:opt}));
+      });
+      host.appendChild(sel);
+    }else{
+      host.appendChild(el('input', {class:'input', id:'value', placeholder:'Ваш ответ'}));
+    }
+    qs('#msg').textContent = '';
+
+    typeset();
+  }
+
+  async function send(){
+    const vEl = qs('#value');
+    const v = vEl ? vEl.value : '';
+    if(!v){ qs('#msg').textContent = 'Введите ответ.'; return; }
+    const d = await api(`/tests/api/attempts/${attemptId}/question/${curQ}/answer/`, 'POST', { value: v, key: curStepKey });
+    qs('#msg').textContent = d.ok ? `Верно! +${d.score} балл.` : `Неверно${d.correct!==undefined?'. Правильный ответ: '+d.correct:''}`;
+    if(d.ok){
+      await loadStep(); // если вопрос завершён — сервер вернёт последний шаг как done, далее можно выбрать другой вопрос
+    }
+  }
+
+  async function next(){
+    // «Далее» — просто перерисовка: если шаг решён, сервер уже увеличил указатель на следующий шаг
+    try { await loadStep(); } catch(e){ console.log(e); }
+  }
+
+  async function finish(){
+    const d = await api(`/tests/api/attempts/${attemptId}/finish/`, 'POST', {});
+    alert(`Итог: ${d.total_points}/${d.max_points} (${d.percent}%). Перехожу к отчёту.`);
+    location.href = d.review_url;
+  }
+
+  document.getElementById('qnav').addEventListener('click', async (e)=>{
+    const b = e.target.closest('[data-q]'); if(!b) return;
+    curQ = parseInt(b.getAttribute('data-q'));
+    await loadStep();
+  });
+
+  qs('#sendBtn').addEventListener('click', send);
+  qs('#nextBtn').addEventListener('click', next);
+  qs('#finishBtn').addEventListener('click', finish);
+  qs('#hintBtn').addEventListener('click', ()=>{
+    if(stepMeta && stepMeta.hint) alert(stepMeta.hint);
+    else alert('Подсказка недоступна.');
+  });
+
+  loadStep().catch(console.error);
+})();
+</script>
+{% endblock %}

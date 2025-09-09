@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Мои тесты — mCognizant{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1 class="h1" style="margin-top:0">Мои тесты</h1>
+  <p class="muted">Здесь отображаются опубликованные тесты, назначенные вашим группам.</p>
+
+  <div id="status" class="small-note" style="margin-bottom:8px"></div>
+
+  <div id="list" class="col" style="gap:12px">
+    <div class="muted" id="empty">Пока нет назначенных тестов.</div>
+  </div>
+</section>
+
+<script>
+(async function(){
+  function qs(sel){ return document.querySelector(sel); }
+  function el(tag, attrs={}, children=[]){
+    const e = document.createElement(tag);
+    for (const [k,v] of Object.entries(attrs)){
+      if (k === 'class') e.className = v;
+      else if (k === 'html') e.innerHTML = v;
+      else e.setAttribute(k, v);
+    }
+    for (const c of children) e.appendChild(c);
+    return e;
+  }
+  async function api(url, method='GET', body=null){
+    const r = await fetch(url, {
+      method,
+      headers: {'Content-Type':'application/json','X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]},
+      body: body ? JSON.stringify(body) : null
+    });
+    const txt = await r.text();
+    if(!r.ok){
+      try { throw new Error(JSON.parse(txt).error || 'Ошибка'); }
+      catch { throw new Error(txt.replace(/<[^>]+>/g,'').slice(0,400)); }
+    }
+    return txt ? JSON.parse(txt) : {};
+  }
+
+  const list = qs('#list');
+  const empty = qs('#empty');
+  const status = qs('#status');
+
+  async function load(){
+    status.textContent = '';
+    list.querySelectorAll('article').forEach(n => n.remove());
+    const data = await api('/tests/api/my/');
+    const tests = data.tests || [];
+    if (!tests.length){ empty.style.display = ''; return; }
+    empty.style.display = 'none';
+
+    for (const t of tests){
+      const card = el('article', {class:'card row', style:'justify-content:space-between;align-items:center'});
+      const left = el('div', {}, [
+        el('div', {class:'h3', html: t.title}),
+        el('div', {class:'muted small', html: `Группа: ${t.group?.name || '—'} · Вопросов: ${t.num_questions}`})
+      ]);
+      const right = el('div');
+
+      if (t.attempt_id){
+        right.appendChild(el('a', {class:'btn', href:`/tests/run/${t.attempt_id}/`, html:'Продолжить'}));
+      } else {
+        const btn = el('button', {class:'btn', html:'Начать'});
+        btn.addEventListener('click', async ()=>{
+          btn.disabled = true;
+          try{
+            const d = await api(`/tests/api/tests/${t.id}/start/`, 'POST', {});
+            location.href = `/tests/run/${d.attempt_id}/`;
+          }catch(err){
+            status.textContent = err.message;
+            btn.disabled = false;
+          }
+        });
+        right.appendChild(btn);
+      }
+
+      card.appendChild(left);
+      card.appendChild(right);
+      list.appendChild(card);
+    }
+  }
+
+  load().catch(err => { qs('#status').textContent = err.message; });
+})();
+</script>
+{% endblock %}

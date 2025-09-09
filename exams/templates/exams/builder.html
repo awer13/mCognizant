@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}Конструктор теста — mCognizant{% endblock %}
+
+{% block content %}
+<section class="card" style="padding:20px">
+  <div class="h1" style="margin:0 0 8px">Конструктор теста</div>
+  <div class="muted" style="margin-bottom:12px">Задайте количество вопросов и темы. Список идёт вниз, как вы просили.</div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="h2">Параметры</div>
+      <div class="col" style="margin-top:10px">
+        <label class="muted">Название</label>
+        <input id="t-title" type="text" class="input" value="Тест по рядам">
+      </div>
+      <div class="col" style="margin-top:10px">
+        <label class="muted">Количество вопросов (1–30)</label>
+        <input id="t-count" type="number" class="input" min="1" max="30" value="5">
+      </div>
+      <div class="col" style="margin-top:10px">
+        <label class="muted">Группа (ID)</label>
+        <input id="t-group" type="number" class="input" placeholder="например, 1">
+      </div>
+      <div class="row" style="margin-top:14px;gap:10px">
+        <button class="btn" id="btn-create">Создать черновик</button>
+        <button class="btn ghost" id="btn-publish" disabled>Опубликовать</button>
+      </div>
+      <div class="small-note" id="status" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <div class="h2">Темы по вопросам</div>
+      <div id="q-list" class="col" style="gap:10px"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const topics = {{ topics|safe }};  // [{id,label}]
+  let testId = null;
+
+  const elCount = document.getElementById('t-count');
+  const elList = document.getElementById('q-list');
+  const elStatus = document.getElementById('status');
+  const elPublish = document.getElementById('btn-publish');
+
+  function renderList(){
+    const n = Math.max(1, Math.min(30, parseInt(elCount.value||'5')));
+    elList.innerHTML = '';
+    for(let i=1;i<=n;i++){
+      const wrap = document.createElement('div');
+      wrap.className = 'row';
+      wrap.style.gap = '10px';
+      wrap.innerHTML = `
+        <div class="muted" style="min-width:78px">Вопрос ${i}</div>
+        <select class="select" data-order="${i}">
+          ${topics.map(t => `<option value="${t.id}">${t.label||t.id}</option>`).join('')}
+        </select>
+      `;
+      elList.appendChild(wrap);
+    }
+  }
+  renderList();
+  elCount.addEventListener('input', renderList);
+
+  async function api(url, method, body){
+    const r = await fetch(url, {
+      method,
+      headers: {'Content-Type':'application/json','X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]},
+      body: body ? JSON.stringify(body) : null
+    });
+    if(!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+
+  document.getElementById('btn-create').addEventListener('click', async ()=>{
+    const title = document.getElementById('t-title').value.trim() || 'Новый тест';
+    const group_id = parseInt(document.getElementById('t-group').value || '0');
+    const num_questions = Math.max(1, Math.min(30, parseInt(elCount.value||'5')));
+    try{
+      const d = await api('/tests/api/tests/', 'POST', {title, group_id, num_questions, max_score:100});
+      testId = d.id;
+      elStatus.textContent = `Черновик создан (id=${testId}). Сохраните темы ниже.`;
+      elPublish.disabled = false;
+      await saveQuestions();
+    }catch(e){ elStatus.textContent = 'Ошибка создания: '+e.message; }
+  });
+
+  async function saveQuestions(){
+    if(!testId){ elStatus.textContent = 'Сначала создайте черновик.'; return; }
+    const selects = elList.querySelectorAll('select[data-order]');
+    const questions = Array.from(selects).map(s => ({
+      order: parseInt(s.getAttribute('data-order')),
+      topic_id: s.value
+    }));
+    try{
+      await api(`/tests/api/tests/${testId}/questions/`, 'PUT', {questions});
+      elStatus.textContent = 'Темы сохранены.';
+    }catch(e){ elStatus.textContent = 'Ошибка сохранения тем: '+e.message; }
+  }
+  elList.addEventListener('change', ()=>{ if(testId) saveQuestions(); });
+
+  elPublish.addEventListener('click', async ()=>{
+    if(!testId) return;
+    try{
+      await saveQuestions();
+      await api(`/tests/api/tests/${testId}/publish/`, 'POST', {});
+      elStatus.textContent = 'Тест опубликован.';
+    }catch(e){ elStatus.textContent = 'Ошибка публикации: '+e.message; }
+  });
+</script>
+{% endblock %}

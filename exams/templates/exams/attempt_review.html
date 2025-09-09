@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Отчёт по попытке #{{ attempt.id }} — mCognizant{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1 class="h1" style="margin-top:0">Отчёт по попытке #{{ attempt.id }}</h1>
+  <div class="muted">Тест: {{ attempt.test.title }}</div>
+  <div class="muted small">Начало: {{ started_at }} · Завершено: {{ finished_at }}</div>
+  {% if score is not None %}<div class="h3" style="margin-top:8px">Итоговые баллы: {{ score }}</div>{% endif %}
+
+  {% if answers and answers.questions %}
+    {% for order, q in answers.questions.items %}
+      <article class="card" style="margin-top:12px">
+        <div class="h3" style="margin:0">Вопрос {{ order }}</div>
+        <table class="table" style="margin-top:8px">
+          <thead>
+            <tr><th>#</th><th>Подвопрос</th><th>Ответ студента</th><th>Верно</th><th>Баллы</th></tr>
+          </thead>
+          <tbody>
+            {% for s in q.steps %}
+              <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ s.label }}</td>
+                <td>{{ s.value }}</td>
+                <td>{% if s.ok %}✓{% else %}✗{% endif %}</td>
+                <td>{{ s.score }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </article>
+    {% endfor %}
+  {% else %}
+    <div class="muted" style="margin-top:8px">Нет данных по шагам.</div>
+  {% endif %}
+
+  <div style="margin-top:12px">
+    {% if user.userprofile.role == "TEACHER" %}
+      <a class="btn ghost" href="/tests/teacher/">← Назад к тестам</a>
+    {% else %}
+      <a class="btn ghost" href="/tests/my/">← Назад к моим тестам</a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

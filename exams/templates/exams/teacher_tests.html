@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% block title %}Мои тесты (преподаватель) — mCognizant{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1 class="h1" style="margin-top:0">Мои тесты</h1>
+  <p class="muted" style="margin-top:-6px">Здесь ваши черновики и опубликованные тесты. Можно открыть попытки студентов и перейти к проверке.</p>
+
+  <div id="status" class="small-note" style="margin-top:8px"></div>
+  <div id="list" style="margin-top:12px"></div>
+</section>
+
+<script>
+async function api(url, method='GET', body=null){
+  const r = await fetch(url, {
+    method,
+    headers: {'Content-Type':'application/json','X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]},
+    body: body ? JSON.stringify(body) : null
+  });
+  const text = await r.text();
+  if(!r.ok){
+    try { throw new Error(JSON.parse(text).error || 'Ошибка'); }
+    catch { throw new Error(text.replace(/<[^>]+>/g,'').slice(0,400)); }
+  }
+  return text ? JSON.parse(text) : {};
+}
+
+function rowTest(t){
+  return `
+    <div class="card" style="padding:12px;margin-top:10px">
+      <div class="row" style="justify-content:space-between;gap:8px">
+        <div>
+          <div style="font-weight:600">${t.title}</div>
+          <div class="muted small">
+            Состояние: ${t.state} · Вопросов: ${t.num_questions} · Группа: ${t.group?.name || '-'} · Попыток: ${t.attempts_count}
+          </div>
+        </div>
+        <div class="row" style="gap:8px">
+          ${t.state === 'DRAFT' ? `<button class="btn ghost" data-pub="${t.id}">Опубликовать</button>` : ``}
+          <button class="btn" data-show="${t.id}">Попытки</button>
+        </div>
+      </div>
+      <div id="att-${t.id}" style="display:none;margin-top:10px"></div>
+    </div>
+  `;
+}
+
+function renderTests(items){
+  const box = document.getElementById('list');
+  if(!items.length){ box.innerHTML = '<p class="muted">Пока нет тестов.</p>'; return; }
+  box.innerHTML = items.map(rowTest).join('');
+
+  box.querySelectorAll('[data-show]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.getAttribute('data-show');
+      const cont = document.getElementById('att-'+id);
+      if(cont.style.display === 'block'){ cont.style.display='none'; return; }
+      cont.style.display = 'block';
+      cont.innerHTML = '<div class="muted small">Загрузка попыток...</div>';
+      try{
+        const d = await api(`/tests/api/tests/${id}/attempts/`);
+        if(!d.attempts.length){ cont.innerHTML = '<div class="muted small">Пока попыток нет.</div>'; return; }
+        const rows = d.attempts.map(a => `
+          <div class="row" style="justify-content:space-between;gap:8px;border:1px solid var(--border);border-radius:12px;padding:8px;margin-top:6px;background:#fff">
+            <div>
+              <div style="font-weight:600">${a.student || '—'}</div>
+              <div class="muted small">Начало: ${a.started_at || '-'} · Окончание: ${a.finished_at || '-'} · Балл: ${a.score ?? '-'}</div>
+            </div>
+            <div>
+              <a class="btn ghost" href="/tests/review/${a.id}/">Открыть</a>
+            </div>
+          </div>
+        `).join('');
+        cont.innerHTML = rows;
+      }catch(e){
+        cont.innerHTML = `<div class="err small">${e.message}</div>`;
+      }
+    });
+  });
+
+  box.querySelectorAll('[data-pub]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.getAttribute('data-pub');
+      const st = document.getElementById('status');
+      st.textContent = 'Публикация...';
+      try{
+        await api(`/tests/api/tests/${id}/publish/`, 'POST', {});
+        st.textContent = 'Опубликовано. Обновляю список...';
+        const d = await api('/tests/api/teacher/tests/');
+        renderTests(d.tests || []);
+        st.textContent = 'Готово.';
+      }catch(e){
+        st.textContent = e.message;
+      }
+    });
+  });
+}
+
+(async function init(){
+  try{
+    const d = await api('/tests/api/teacher/tests/');
+    renderTests(d.tests || []);
+  }catch(e){
+    document.getElementById('status').textContent = e.message;
+  }
+})();
+</script>
+{% endblock %}

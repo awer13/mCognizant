@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Прохождение теста — {{ test.title }}{% endblock %}
+{% block container_class %}container--wide{% endblock %}
+
+{% block content %}
+  <h1 class="h1">{{ test.title }}</h1>
+
+  <div class="split">
+    <aside class="sidebar">
+      <div class="row" style="justify-content:space-between">
+        <div>Вопросы</div>
+        <div class="muted"><span id="unlock">1</span>/{{ struct_json|length }}</div>
+      </div>
+      <div id="qnav" class="qnav"></div>
+    </aside>
+
+    <section class="card" id="stage"></section>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const STRUCT = {{ struct_json|safe }};
+const ATTEMPT_ID = {{ attempt.id }};
+let currentQ=0,currentSub=0,maxUnlocked=0;
+let answers={},perQuestion={};
+
+async function loadState(){
+  const r=await fetch(`/tests/api/attempt/${ATTEMPT_ID}/`); const d=await r.json();
+  answers=d.answers||{}; perQuestion=d.per_question||{}; currentQ=d.current_q_index||0;
+  maxUnlocked=Math.max(0,...Object.entries(perQuestion).filter(([k,v])=>v>0).map(([k])=>+k))||0;
+  renderNav(); renderQuestion();
+}
+function renderNav(){
+  document.getElementById('unlock').textContent = maxUnlocked+1;
+  qnav.innerHTML = STRUCT.map((q,i)=>{
+    const done = Number(perQuestion[i]||0) >= q.subCount;
+    return `<button class="qbtn ${i===currentQ?'active':''} ${done?'done':''}" ${i>maxUnlocked?'disabled':''} onclick="go(${i})">${i+1}</button>`;
+  }).join("");
+}
+function go(i){ if(i<=maxUnlocked){ currentQ=i; currentSub=0; setCurrent(i); renderNav(); renderQuestion(); } }
+async function setCurrent(i){
+  await fetch(`/tests/api/attempt/${ATTEMPT_ID}/set-current/`, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({current_q_index:i})});
+}
+function renderQuestion(){
+  const q=STRUCT[currentQ]; const a=answers[currentQ]||Array.from({length:q.subCount}).map(()=>"" ); answers[currentQ]=a;
+  stage.innerHTML = `
+    <div class="muted">${q.topicLabel||q.topic}</div>
+    <div class="col" style="margin-top:12px">
+      <div>Подвопрос ${currentSub+1} из ${q.subCount}</div>
+      <input id="ans" type="text" value="${a[currentSub]||''}" placeholder="Введите ответ…" class="input">
+      <div class="row" style="justify-content:space-between">
+        <button class="btn ghost" onclick="prevSub()" ${currentSub===0?'disabled':''}>Назад</button>
+        <button class="btn" onclick="nextOrComplete()">${currentSub<q.subCount-1?'Далее':'Завершить вопрос'}</button>
+      </div>
+    </div>
+    <div id="finish" style="margin-top:12px"></div>
+  `;
+  document.getElementById('ans').onchange = save;
+}
+async function save(){
+  const text=document.getElementById('ans').value;
+  await fetch(`/tests/api/attempt/${ATTEMPT_ID}/save/`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({qIndex:currentQ,subIndex:currentSub,text})});
+  const r=await fetch(`/tests/api/attempt/${ATTEMPT_ID}/`); const d=await r.json(); perQuestion=d.per_question||{}; renderNav();
+}
+async function nextOrComplete(){
+  await save(); const q=STRUCT[currentQ];
+  if(document.getElementById('ans').value.trim()==='') return;
+  if(currentSub<q.subCount-1){ currentSub++; renderQuestion(); return; }
+  maxUnlocked = Math.max(maxUnlocked,currentQ+1); renderNav();
+  if(Object.values(perQuestion).length===STRUCT.length){
+    document.getElementById('finish').innerHTML = '<button class="btn" onclick="submitAttempt()">Завершить тест и показать отчёт</button>';
+  }
+}
+function prevSub(){ if(currentSub>0){ currentSub--; renderQuestion(); } }
+async function submitAttempt(){
+  const r=await fetch(`/tests/api/attempt/${ATTEMPT_ID}/submit/`, {method:"POST"}); const d=await r.json();
+  const rows = STRUCT.map((q,i)=>{
+    const got=Number(perQuestion[i]||0),max=q.subCount;
+    const status = got===max?'выполнено':got===0?'пусто':'частично';
+    return `<tr><td>${i+1}</td><td>${q.topicLabel||q.topic}</td><td>${got} / ${max}</td><td>${status}</td></tr>`;
+  }).join("");
+  stage.innerHTML = `<h2 class="h2">Отчёт</h2>
+    <p>Сумма баллов: <b>${d.total_score}</b></p>
+    <table class="table"><thead><tr><th>#</th><th>Тема</th><th>Баллы</th><th>Статус</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+loadState();
+</script>
+{% endblock %}

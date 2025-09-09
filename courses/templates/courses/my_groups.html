@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Мои группы — mCognizant{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1 class="h1" style="margin-top:0">Мои группы</h1>
+
+  {% if role == "TEACHER" %}
+    <p class="muted" style="margin-top:-6px">Создавайте группы и делитесь кодом приглашения со студентами.</p>
+
+    <div class="row" style="gap:8px;margin-top:10px">
+      <input id="new-group-name" class="input" type="text" placeholder="Название группы">
+      <button id="btn-create-group" class="btn">Создать группу</button>
+    </div>
+
+    <div id="create-status" class="small-note" style="margin-top:6px"></div>
+
+    <ul class="plain-list" style="margin-top:14px">
+      {% for g in groups %}
+        <li class="row" style="justify-content:space-between;gap:10px">
+          <div>
+            <div style="font-weight:600">{{ g.name }}</div>
+            <div class="muted small">Код: {{ g.enroll_code }} · ID: {{ g.id }}</div>
+          </div>
+        </li>
+      {% empty %}
+        <li class="muted">У вас пока нет групп.</li>
+      {% endfor %}
+    </ul>
+
+    <script>
+      async function api(url, method, body){
+        const r = await fetch(url, {
+          method,
+          headers: {'Content-Type':'application/json','X-CSRFToken': (document.cookie.match(/csrftoken=([^;]+)/)||[])[1]},
+          body: body ? JSON.stringify(body) : null
+        });
+        if(!r.ok){
+          const t = await r.text();
+          try { throw new Error(JSON.parse(t).error); } catch { throw new Error(t); }
+        }
+        return r.json();
+      }
+      document.getElementById('btn-create-group')?.addEventListener('click', async ()=>{
+        const inp = document.getElementById('new-group-name');
+        const name = (inp.value||"").trim();
+        const status = document.getElementById('create-status');
+        if(!name){ status.textContent = "Введите название группы."; return; }
+        try{
+          const d = await api('/courses/api/create/', 'POST', {name});
+          status.textContent = `Группа создана: ${d.name} (ID ${d.id}, код ${d.enroll_code}). Обновите страницу.`;
+          inp.value = "";
+        }catch(e){ status.textContent = e.message; }
+      });
+    </script>
+
+  {% elif role == "STUDENT" %}
+    <p class="muted" style="margin-top:-6px">Ваши текущие группы:</p>
+    <ul class="plain-list" style="margin-top:14px">
+      {% for m in memberships %}
+        <li class="row" style="justify-content:space-between;gap:10px">
+          <div>
+            <div style="font-weight:600">{{ m.group.name }}</div>
+            <div class="muted small">Код: {{ m.group.enroll_code }} · ID: {{ m.group.id }}</div>
+          </div>
+          <div class="muted small">с {{ m.joined_at|date:"d.m.Y H:i" }}</div>
+        </li>
+      {% empty %}
+        <li class="muted">Вы ещё не вступили ни в одну группу. <a href="/courses/join/">Вступить в группу</a></li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+{% endblock %}

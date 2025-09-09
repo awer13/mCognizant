@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% block title %}Регистрация — mCognizant{% endblock %}
+
+{% block head %}
+<style>
+  /* Страховка: скрыть любые чужие submit’ы внутри страницы регистрации */
+  #signup-page button[type="submit"],
+  #signup-page input[type="submit"] { display: none !important; }
+  #signup-page #submit-btn { display: inline-flex !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<section id="signup-page" class="card form-card">
+  <h1 class="h1" style="margin-top:0">Регистрация</h1>
+  <p class="muted" style="margin-top:-6px">Создайте аккаунт, выберите роль и начните работу на платформе.</p>
+
+  <form method="post" novalidate id="signup-form" autocomplete="on">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+      <div class="err">
+        {% for e in form.non_field_errors %}
+          {{ e }}{% if not forloop.last %}<br>{% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# Роль: если форма не даёт поле role — показываем наш селектор #}
+    {% if form.role %}
+      <div class="col" style="margin-top:10px">
+        <label for="{{ form.role.id_for_label }}" class="muted">Роль</label>
+        {{ form.role }}
+        {% for e in form.role.errors %}<div class="err">{{ e }}</div>{% endfor %}
+      </div>
+    {% else %}
+      <div class="col" style="margin-top:10px">
+        <label class="muted">Роль</label>
+        <select name="role" class="select" id="role-select">
+          <option value="TEACHER" {% if request.GET.role == "teacher" %}selected{% endif %}>Преподаватель</option>
+          <option value="STUDENT" {% if request.GET.role == "student" or not request.GET.role %}selected{% endif %}>Студент</option>
+        </select>
+      </div>
+    {% endif %}
+
+    {# username #}
+    <div class="col" style="margin-top:10px">
+      <label class="muted" for="{{ form.username.id_for_label }}">Имя пользователя</label>
+      {{ form.username }}
+      {% for e in form.username.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    {# password1 / password2 (UserCreationForm) #}
+    <div class="col" style="margin-top:10px">
+      <label class="muted" for="{{ form.password1.id_for_label }}">Пароль</label>
+      {{ form.password1 }}
+      {% for e in form.password1.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="col" style="margin-top:10px">
+      <label class="muted" for="{{ form.password2.id_for_label }}">Подтверждение пароля</label>
+      {{ form.password2 }}
+      {% for e in form.password2.errors %}<div class="err">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="small-note" style="margin-top:8px">Требования к паролю:</div>
+    <ul class="req-list" id="pw-req">
+      <li data-k="len" class="bad">Минимум 8 символов</li>
+      <li data-k="lower" class="bad">Строчная буква</li>
+      <li data-k="upper" class="bad">Заглавная буква</li>
+      <li data-k="digit" class="bad">Цифра</li>
+      <li data-k="special" class="bad">Спецсимвол</li>
+    </ul>
+    <div id="pw-match" class="small-note" style="margin-top:6px"></div>
+
+    <!-- Единственная кнопка -->
+    <div class="row" style="justify-content:flex-start;margin-top:16px;gap:12px">
+      <button class="btn" type="submit" id="submit-btn">Зарегистрироваться</button>
+      <div class="muted" style="font-size:14px">
+        Уже есть аккаунт? <a href="/accounts/login/">Войти</a>
+      </div>
+    </div>
+  </form>
+</section>
+
+<script>
+  // Удалим любые лишние submit, если их добавил рендерер/библиотека
+  (function killExtraSubmits(){
+    document.querySelectorAll('#signup-page button[type="submit"], #signup-page input[type="submit"]').forEach(el=>{
+      if(el.id !== 'submit-btn') el.remove();
+    });
+  })();
+
+  // Поля пароля (UserCreationForm): password1 / password2
+  const p1 = document.querySelector('#signup-page input[name="password1"]');
+  const p2 = document.querySelector('#signup-page input[name="password2"]');
+  const submitBtn = document.getElementById('submit-btn');
+  const reqList = document.getElementById('pw-req');
+  const matchHint = document.getElementById('pw-match');
+  const form = document.getElementById('signup-form');
+
+  function mark(key, ok){
+    const el = reqList?.querySelector(`[data-k="${key}"]`);
+    if(!el) return;
+    el.classList.toggle('ok', ok);
+    el.classList.toggle('bad', !ok);
+  }
+  function checkPassword(){
+    if(!p1) return true;
+    const v = p1.value || "";
+    const okLen=v.length>=8, okLower=/[a-z]/.test(v), okUpper=/[A-Z]/.test(v), okDigit=/\d/.test(v), okSpec=/[^\w\s]/.test(v);
+    mark('len',okLen); mark('lower',okLower); mark('upper',okUpper); mark('digit',okDigit); mark('special',okSpec);
+    const complexityOK = okLen&&okLower&&okUpper&&okDigit&&okSpec;
+
+    let matchOK = true;
+    if(p2){
+      matchOK = (p2.value || "") === v;
+      matchHint.textContent = matchOK ? "" : "Пароли не совпадают.";
+      matchHint.style.color = matchOK ? "inherit" : "#b91c1c";
+    }
+    submitBtn.disabled = !(complexityOK && matchOK);
+    return complexityOK && matchOK;
+  }
+
+  p1?.addEventListener('input', checkPassword);
+  p2?.addEventListener('input', checkPassword);
+  form?.addEventListener('submit', (e)=>{
+    if(!checkPassword()){ e.preventDefault(); return; }
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Отправка...';
+  });
+  checkPassword();
+</script>
+{% endblock %}

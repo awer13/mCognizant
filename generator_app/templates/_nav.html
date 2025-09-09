@@ -1,0 +1,35 @@
+<style>
+  .topbar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #eef2f7;background:#fff;position:sticky;top:0;z-index:10}
+  .nav-left,.nav-right{display:flex;align-items:center;gap:10px}
+  .brand{font-weight:800;color:#0f172a;text-decoration:none}
+  .nav-right form{margin:0}
+</style>
+
+<div class="topbar">
+  <div class="nav-left">
+    <a class="brand" href="/">mCognizant</a>
+
+    {% if user.is_authenticated and user.userprofile.role == "TEACHER" %}
+      <a class="btn ghost" href="/tests/builder/">Конструктор теста</a>
+      <a class="btn ghost" href="/courses/my/">Мои группы</a>
+      <a class="btn ghost" href="/tests/teacher/">Мои тесты</a>  
+    {% elif user.is_authenticated and user.userprofile.role == "STUDENT" %}
+      <a class="btn ghost" href="/courses/join/">Вступить в группу</a>
+      <a class="btn ghost" href="/tests/my/">Мои тесты</a>
+    {% endif %}
+  </div>
+
+  <div class="nav-right">
+    {% if user.is_authenticated %}
+      <span class="badge">{{ user.username }} — {{ user.userprofile.role }}</span>
+      <!-- logout только POST, чтобы не ловить 405 -->
+      <form method="post" action="/accounts/logout/">
+        {% csrf_token %}
+        <button class="btn ghost" type="submit">Выйти</button>
+      </form>
+    {% else %}
+      <a class="btn ghost" href="/accounts/login/">Войти</a>
+      <a class="btn ghost" href="/accounts/signup/">Регистрация</a>
+    {% endif %}
+  </div>
+</div>

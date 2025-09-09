@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}Вступить в группу — mCognizant{% endblock %}
+
+{% block content %}
+<section class="card form-card">
+  <h1 class="h1" style="margin-top:0">Вступить в группу</h1>
+  <p class="muted" style="margin-top:-6px">Введите <b>ID</b> или <b>код приглашения</b>, который дал преподаватель.</p>
+
+  {% if ok %}<div class="note success" style="margin-top:10px">{{ ok }}</div>{% endif %}
+  {% if error %}<div class="err" style="margin-top:10px">{{ error }}</div>{% endif %}
+
+  <form method="post" style="margin-top:12px">
+    {% csrf_token %}
+    <div class="col">
+      <label class="muted" for="group_key">ID или код группы</label>
+      <input class="input" type="text" id="group_key" name="group_key"
+             placeholder="например, 1 или AB12CD"
+             value="{{ entered|default_if_none:'' }}">
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" type="submit">Вступить</button>
+    </div>
+  </form>
+</section>
+
+<section class="card" style="margin-top:20px">
+  <div class="h2">Мои группы</div>
+  {% if memberships %}
+    <ul class="plain-list" style="margin-top:8px">
+      {% for m in memberships %}
+        <li>
+          <div class="row" style="justify-content:space-between;gap:10px">
+            <div>
+              <div style="font-weight:600">{{ m.group.name }}</div>
+              <div class="muted small">Код: {{ m.group.enroll_code }} · ID: {{ m.group.id }}</div>
+            </div>
+            <div class="muted small">с {{ m.joined_at|date:"d.m.Y H:i" }}</div>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted" style="margin-top:8px">Вы ещё не состоите ни в одной группе.</p>
+  {% endif %}
+</section>
+{% endblock %}
